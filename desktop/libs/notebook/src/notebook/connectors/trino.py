@@ -155,43 +155,44 @@ class TrinoApi(Api):
 
     return new_session_info
 
-  @query_error_handler
-  def execute(self, notebook, snippet):
-    database = snippet['database']
-    database = self._format_identifier(database, is_db=True)
-    query_client = TrinoQuery(self.trino_request, 'USE ' + database)
-    query_client.execute()
+@query_error_handler
+def execute(self, notebook, snippet):
+  database = snippet['database']
+  database = self._format_identifier(database, is_db=True)
 
-    current_statement = self._get_current_statement(notebook, snippet)
-    statement = current_statement['statement']
-    query_client = TrinoQuery(self.trino_request, statement)
-    response = self.trino_request.post(query_client.query)
-    status = self.trino_request.process(response)
+  # USE <database>
+  TrinoQuery(self.trino_request, 'USE ' + database).execute()
 
-    response = {
-      'row_count': 0,
-      'rows_remaining': 0,
-      'next_uri': status.next_uri,
-      'sync': None,
-      'has_result_set': status.next_uri is not None,
-      'guid': status.id,
-      'result': {
-        'has_more': status.id is not None,
-        'data': status.rows,
-        'meta': [{
-            'name': col['name'],
-            'type': col['type'],
-            'comment': ''
-          }
-          for col in status.columns
-        ]
-        if status.columns else [],
-        'type': 'table'
-      }
+  current_statement = self._get_current_statement(notebook, snippet)
+  statement = current_statement['statement']
+
+  # 주요 변경: 쿼리 실행 + 결과 자동 수집
+  query_client = TrinoQuery(self.trino_request, statement)
+  query_client.execute()  # <-- 내부적으로 결과 rows, next_uri까지 자동 처리됨
+
+  response = {
+    'row_count': 0,
+    'rows_remaining': 0,
+    'next_uri': query_client.next_uri,
+    'sync': None,
+    'has_result_set': query_client.next_uri is not None,
+    'guid': query_client.query_id,
+    'result': {
+      'has_more': query_client.next_uri is not None,
+      'data': query_client.result.rows,
+      'meta': [{
+          'name': col['name'],
+          'type': col['type'],
+          'comment': ''
+        }
+        for col in query_client.columns
+      ] if query_client.columns else [],
+      'type': 'table'
     }
-    response.update(current_statement)
+  }
+  response.update(current_statement)
 
-    return response
+  return response
 
   @query_error_handler
   def check_status(self, notebook, snippet):

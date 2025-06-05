@@ -198,6 +198,7 @@ class TrinoApi(Api):
     response = {}
     status = 'expired'
     next_uri = snippet['result']['handle']['next_uri']
+    has_result_set = False
 
     if next_uri is None:
       status = 'available'
@@ -207,12 +208,14 @@ class TrinoApi(Api):
       if _status.stats['state'] == 'QUEUED':
         status = 'waiting'
       elif _status.stats['state'] == 'RUNNING':
-        status = 'available'  # need to verify
+        status = 'running'
       else:
         status = 'available'
+      has_result_set = _status.next_uri is not None
 
     response['status'] = status
     response['next_uri'] = _status.next_uri if status != 'available' else next_uri
+    response['has_result_set'] = has_result_set
     return response
 
   @query_error_handler
@@ -337,6 +340,9 @@ class TrinoApi(Api):
         raise e
 
     return {'status': 0}
+
+  def cancel(self, notebook, snippet):
+    return self.close_statement(notebook, snippet)
 
   def close_session(self, session):
     self._remove_session_info_from_user()

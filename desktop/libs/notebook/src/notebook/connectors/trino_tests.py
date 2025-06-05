@@ -153,6 +153,31 @@ class TestTrinoApi(TestCase):
 
     assert result['status'] == 'available'
     assert result['next_uri'] == 'http://url'
+    assert result['has_result_set'] is True
+
+  def test_check_status_running(self):
+    mock_trino_request = MagicMock()
+    self.trino_api.trino_request = mock_trino_request
+
+    mock_trino_request.get.return_value = MagicMock()
+    mock_trino_request.process.return_value = MagicMock(stats={'state': 'RUNNING'}, next_uri='http://url')
+
+    result = self.trino_api.check_status(notebook={}, snippet={'result': {'handle': {'next_uri': 'http://url'}}})
+
+    assert result['status'] == 'running'
+    assert result['next_uri'] == 'http://url'
+    assert result['has_result_set'] is True
+
+  def test_cancel(self):
+    mock_trino_request = MagicMock()
+    self.trino_api.trino_request = mock_trino_request
+    mock_trino_request.delete.return_value = MagicMock()
+
+    snippet = {'result': {'handle': {'next_uri': 'http://url'}}}
+    response = self.trino_api.cancel(notebook={}, snippet=snippet)
+
+    mock_trino_request.delete.assert_called_with('http://url')
+    assert response['status'] == 0
 
   def test_execute(self):
     with patch('notebook.connectors.trino.TrinoQuery') as TrinoQuery:
